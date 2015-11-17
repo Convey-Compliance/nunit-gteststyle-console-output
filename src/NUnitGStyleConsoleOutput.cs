@@ -65,6 +65,7 @@ namespace NUnit.Framework
                           count,
                           details.Fixture != null ? details.Fixture.GetType().Name : details.FullName, 
                           Environment.TickCount - startTickCount);
+        Console.WriteLine("");
       }
       else
       {
