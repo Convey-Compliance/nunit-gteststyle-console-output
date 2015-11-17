@@ -1,33 +1,67 @@
 ﻿using System;
+using System.Collections.Concurrent;
 
 namespace NUnit.Framework
 {
-  [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class |
-                  AttributeTargets.Interface | AttributeTargets.Assembly,
-    AllowMultiple = true)]
+  [AttributeUsage(AttributeTargets.Method | AttributeTargets.Class | AttributeTargets.Assembly)]
   public class GTestStyleConsoleOutputAttribute : Attribute, ITestAction
   {
-    private int _startTickCount;
+    private static int _totalTestCount;
+    private static string _lastBeforeTestFullName;
+    private static string _lastAfterTestFullName;
+    private static readonly ConcurrentDictionary<string, int> _testsProcessed = new ConcurrentDictionary<string, int>();
+    private static readonly ConcurrentDictionary<string, int> _testsCount = new ConcurrentDictionary<string, int>();
 
     public void BeforeTest(TestDetails details)
     {
-      _startTickCount = Environment.TickCount;
+      if (_lastBeforeTestFullName == details.FullName) return;
+      _lastBeforeTestFullName = details.FullName;
+      if (details.Fixture == null)
+      {
+        _totalTestCount = 0;
+        _testsProcessed.Clear();
+        _testsCount.Clear();
+      }
+      var startTickCount = Environment.TickCount;
+      _testsProcessed.GetOrAdd(details.FullName, startTickCount);
       if (details.IsSuite)
       {
-        Console.WriteLine("[----------] running tests from {0}", details.Fixture != null ? details.Fixture.GetType().Name : "{no fixture}");
+        if (details.Fixture != null)
+          _testsCount.GetOrAdd(details.Fixture.GetType().Name, 0);
+        Console.WriteLine("[----------] running tests from {0}", details.Fixture != null ? details.Fixture.GetType().Name : details.FullName);
       }
       else
       {
-        Console.WriteLine("[ RUN      ] {0}", details.Method != null ? details.Method.Name : "{no method}");
+        if (details.Fixture != null)
+        {
+          int count;
+          _testsCount.TryGetValue(details.Fixture.GetType().Name, out count);
+          _testsCount.TryUpdate(details.Fixture.GetType().Name, count + 1, count);
+        }
+        _totalTestCount++;
+        Console.WriteLine("[ RUN      ] {0}.{1}", 
+                          details.Fixture != null ? details.Fixture.GetType().Name : "<no class>", 
+                          details.Method != null ? details.Method.Name : "{no method}");
       }
-
     }
 
     public void AfterTest(TestDetails details)
     {
+      if (_lastAfterTestFullName == details.FullName) return;
+      _lastAfterTestFullName = details.FullName;
+      int startTickCount;
+      if (!_testsProcessed.TryGetValue(details.FullName, out startTickCount))
+        return;
       if (details.IsSuite)
       {
-        Console.WriteLine("[==========] finished tests from {0} ({1} ms total)", details.Fixture != null ? details.Fixture.GetType().Name : "{no fixture}", Environment.TickCount - _startTickCount);
+        int count;
+        if (details.Fixture != null)
+          _testsCount.TryGetValue(details.Fixture.GetType().Name, out count);
+        else count = _totalTestCount;
+        Console.WriteLine("[==========] {0} test from {1} ({2} ms total)", 
+                          count,
+                          details.Fixture != null ? details.Fixture.GetType().Name : details.FullName, 
+                          Environment.TickCount - startTickCount);
       }
       else
       {
@@ -62,7 +96,11 @@ namespace NUnit.Framework
             throw new ArgumentOutOfRangeException();
         }
         {
-          Console.WriteLine("[{0}] {1} ({2} ms total)", stateStr, details.Method != null ? details.Method.Name : "{no method}", Environment.TickCount - _startTickCount);
+          Console.WriteLine("[{0}] {1}.{2} ({3} ms total)", 
+                            stateStr, 
+                            details.Fixture != null ? details.Fixture.GetType().Name : "<no class>", 
+                            details.Method != null ? details.Method.Name : "{no method}", 
+                            Environment.TickCount - startTickCount);
         }
       }
     }
