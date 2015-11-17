@@ -1,5 +1,5 @@
 ﻿using System;
-using System.Collections.Concurrent;
+using System.Collections.Generic;
 
 namespace NUnit.Framework
 {
@@ -9,8 +9,8 @@ namespace NUnit.Framework
     private static int _totalTestCount;
     private static string _lastBeforeTestFullName;
     private static string _lastAfterTestFullName;
-    private static readonly ConcurrentDictionary<string, int> _testsProcessed = new ConcurrentDictionary<string, int>();
-    private static readonly ConcurrentDictionary<string, int> _testsCount = new ConcurrentDictionary<string, int>();
+    private static readonly Dictionary<string, int> _testsProcessed = new Dictionary<string, int>();
+    private static readonly Dictionary<string, int> _testsCount = new Dictionary<string, int>();
 
     public void BeforeTest(TestDetails details)
     {
@@ -23,11 +23,11 @@ namespace NUnit.Framework
         _testsCount.Clear();
       }
       var startTickCount = Environment.TickCount;
-      _testsProcessed.GetOrAdd(details.FullName, startTickCount);
+      _testsProcessed.Add(details.FullName, startTickCount);
       if (details.IsSuite)
       {
         if (details.Fixture != null)
-          _testsCount.GetOrAdd(details.Fixture.GetType().Name, 0);
+          _testsCount.Add(details.Fixture.GetType().Name, 0);
         Console.WriteLine("[----------] running tests from {0}", details.Fixture != null ? details.Fixture.GetType().Name : details.FullName);
       }
       else
@@ -35,8 +35,11 @@ namespace NUnit.Framework
         if (details.Fixture != null)
         {
           int count;
-          _testsCount.TryGetValue(details.Fixture.GetType().Name, out count);
-          _testsCount.TryUpdate(details.Fixture.GetType().Name, count + 1, count);
+          if (_testsCount.TryGetValue(details.Fixture.GetType().Name, out count))
+          {
+            _testsCount.Remove(details.Fixture.GetType().Name);
+            _testsCount.Add(details.Fixture.GetType().Name, count + 1);
+          }
         }
         _totalTestCount++;
         Console.WriteLine("[ RUN      ] {0}.{1}", 
